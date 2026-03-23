@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=tdeParted
+GenericName=Partition Editor
+Comment=Create, reorganize, and delete partitions
+Exec=tdeparted
+Icon=tdeparted
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true
+X-TDE-StartupNotify=true
