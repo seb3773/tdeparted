@@ -1,5 +1,5 @@
 # tdeParted
-
+![tdeParted](./konqi/konqi_parted.jpg)
 ## A Partition Editor for Trinity Desktop
 
 tdeParted is based on GParted (https://github.com/GNOME/gparted). Originally intended as a TQt3 port of GParted, several features not present in GParted have been added. These include a secure erase function, a summary of S.M.A.R.T. information for compatible devices, a quick benchmark to get an idea of a drive’s read and write performance (not a replacement for dedicated disk benchmarking tools, but useful for a quick estimate), creation and restoration of disk/partition images, device cloning, the ability to export a pending operation chain as a bash script, copy-to-clipboard support in key dialogs, and a graphical overhaul with improved ergonomics (a more complete toolbar, quick mount/unmount buttons for partitions, and other details).
