@@ -12639,7 +12639,7 @@ void Win_GParted_TQt::update_valid_actions()
 		m_operations_list->setEnabled( have_device );
 }
 
-static void show_disklabel_unrecognized_tqt( TQWidget *parent, const Glib::ustring &device_name );
+// Method declared in class: void show_disklabel_unrecognized_tqt( const Glib::ustring &device_name );
 
 void Win_GParted_TQt::action_new()
 {
@@ -12652,7 +12652,7 @@ void Win_GParted_TQt::action_new()
 	if (m_selected_partition->type   == TYPE_UNPARTITIONED &&
 	    m_selected_partition->fstype == FS_UNALLOCATED)
 	{
-		show_disklabel_unrecognized_tqt( this, m_devices[m_current_device].get_path() );
+		show_disklabel_unrecognized_tqt( m_devices[m_current_device].get_path() );
 		return;
 	}
 
@@ -13022,18 +13022,24 @@ static void show_resize_readonly_tqt( TQWidget *parent, const Glib::ustring &pat
 	TQMessageBox::information( parent, TQString::fromUtf8( _( "Resize/Move" ) ), msg + "\n\n" + sec, TQMessageBox::Ok, TQMessageBox::NoButton );
 }
 
-static void show_disklabel_unrecognized_tqt( TQWidget *parent, const Glib::ustring &device_name )
+void Win_GParted_TQt::show_disklabel_unrecognized_tqt( const Glib::ustring &device_name )
 {
 	TQString msg = TQString::fromUtf8( _( "No partition table found on the device." ) );
 	TQString sec = TQString::fromUtf8( _( "A partition table is required before partitions can be created." ) );
 	sec += TQString::fromLatin1("\n\n");
 	sec += TQString::fromUtf8( _( "Create a new partition table on %1?" ) )
 		.arg( TQString::fromUtf8( device_name.c_str() ) );
-	TQMessageBox::information( parent,
-	                          TQString::fromUtf8( _( "Create Partition Table" ) ),
-	                          msg + TQString::fromLatin1("\n\n") + sec,
-	                          TQMessageBox::Ok,
-	                          TQMessageBox::NoButton );
+	TQMessageBox mb( TQString::fromUtf8( _( "Create Partition Table" ) ),
+	                msg + TQString::fromLatin1("\n\n") + sec,
+	                TQMessageBox::Information,
+	                TQMessageBox::Ok | TQMessageBox::Default,
+	                TQMessageBox::Cancel | TQMessageBox::Escape,
+	                TQMessageBox::NoButton,
+	                this );
+	mb.setButtonText( TQMessageBox::Ok, TQString::fromUtf8( _( "Create" ) ) );
+	mb.setButtonText( TQMessageBox::Cancel, TQString::fromUtf8( _( "Cancel" ) ) );
+	if (mb.exec() == TQMessageBox::Ok)
+		menu_device_create_partition_table();
 }
 
 void Win_GParted_TQt::action_resize_move()
@@ -13176,7 +13182,7 @@ void Win_GParted_TQt::action_paste()
 	if (m_selected_partition->type   == TYPE_UNPARTITIONED &&
 	    m_selected_partition->fstype == FS_UNALLOCATED)
 	{
-		show_disklabel_unrecognized_tqt( this, m_devices[m_current_device].get_path() );
+		show_disklabel_unrecognized_tqt( m_devices[m_current_device].get_path() );
 		return;
 	}
 

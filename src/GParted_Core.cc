@@ -4570,7 +4570,10 @@ struct ped_exception_ctx {
 static bool _ped_exception_handler( struct ped_exception_ctx *ctx )
 {
 	if (ctx->e && ctx->e->message && ctx->e->message[0])
+	{
+		std::cerr << ctx->e->message << std::endl;
 		libparted_messages.push_back( ctx->e->message );
+	}
 	char optcount = 0;
 	int opt = 0;
 	for( char c = 0; c < 10; c++ )
@@ -4579,11 +4582,8 @@ static bool _ped_exception_handler( struct ped_exception_ctx *ctx )
 			optcount++;
 		}
 	// If only one option was given, choose it without popup.
-	// But still show a dialog for warnings/errors so the user sees the reason.
-	if( optcount == 1 &&
-	    ctx->e->type == PED_EXCEPTION_INFORMATION &&
-	    ctx->e->type != PED_EXCEPTION_BUG &&
-	    ctx->e->type != PED_EXCEPTION_FATAL )
+	// Only show a dialog for BUG or FATAL exceptions.
+	if( optcount == 1 && ctx->e->type != PED_EXCEPTION_BUG && ctx->e->type != PED_EXCEPTION_FATAL )
 	{
 		ctx->ret = (PedExceptionOption)opt;
 		ctx->mutex.lock();
