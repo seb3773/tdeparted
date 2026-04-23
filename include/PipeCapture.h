@@ -1,0 +1,65 @@
+/* Copyright (C) 2013 Phillip Susi
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef GPARTED_PIPECAPTURE_H
+#define GPARTED_PIPECAPTURE_H
+
+#include <string>
+#include <vector>
+#include <stddef.h>            // typedef size_t
+#include <glib.h>              // typedef gunichar
+#include <glibmm/ustring.h>
+#include <glibmm/refptr.h>
+#include <glibmm/iochannel.h>
+#include <sigc++/signal.h>
+
+
+namespace GParted
+{
+
+
+// captures output pipe of subprocess into a ustring and emits a signal on eof
+class PipeCapture
+{
+public:
+	PipeCapture( int fd, Glib::ustring &buffer );
+
+	void connect_signal();
+	sigc::signal<void> signal_eof;
+	sigc::signal<void> signal_update;
+
+private:
+	bool OnReadable( Glib::IOCondition condition );
+	static gboolean _OnReadable( GIOChannel *source,
+	                             GIOCondition condition,
+	                             gpointer data );
+
+	Glib::RefPtr<Glib::IOChannel> m_channel;             // Wrapper around fd
+	std::vector<char>             m_readbuf;             // Bytes read from IOChannel (fd)
+	size_t                        m_fill_offset;         // Filling offset into m_readbuf
+	std::vector<gunichar>         m_linevec;             // Current line stored as UCS-4 characters
+	size_t                        m_cursor;              // Cursor position index into m_linevec
+	std::string                   m_capturebuf;          // Captured output as UTF-8 characters
+	size_t                        m_line_start;          // Index into m_capturebuf where current line starts
+	Glib::ustring&                m_callerbuf;           // Reference to caller supplied buffer
+	bool                          m_callerbuf_uptodate;  // Has m_capturebuf changed since last copied to m_callerbuf?
+};
+
+
+}  // namespace GParted
+
+
+#endif /* GPARTED_PIPECAPTURE_H */
