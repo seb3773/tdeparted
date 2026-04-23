@@ -20,7 +20,12 @@ OperationConvertPartitionTable::OperationConvertPartitionTable( const Device &de
 		     Partition p;
 		     p.set_unpartitioned( d.get_path(), "", FS_UNALLOCATED, d.length, d.sector_size, false );
 		     return p;
-	     }( device ) ),
+     }( device ),
+             [] (const Device &d) {
+		     Partition p;
+		     p.set_unpartitioned( d.get_path(), "", FS_UNALLOCATED, d.length, d.sector_size, false );
+		     return p;
+     }( device ) ),
   m_from( from ),
   m_to( to )
 {

@@ -21,6 +21,11 @@ OperationCreatePartitionTable::OperationCreatePartitionTable( const Device &devi
 		     Partition p;
 		     p.set_unpartitioned( d.get_path(), "", FS_UNALLOCATED, d.length, d.sector_size, false );
 		     return p;
+	     }( device ),
+             [] (const Device &d) {
+		     Partition p;
+		     p.set_unpartitioned( d.get_path(), "", FS_UNALLOCATED, d.length, d.sector_size, false );
+		     return p;
 	     }( device ) ),
   m_new_disklabel( new_disklabel )
 {

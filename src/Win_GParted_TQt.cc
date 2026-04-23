@@ -5914,6 +5914,11 @@ static int partition_in_operation_queue_count_tqt( const OperationVector &ops, c
 	 	 	 if (ops[i]->get_partition_original().get_path() == path)
 	 	 	 	 count++;
 	 	 }
+	 	 else if (ops[i]->m_type == OPERATION_CREATE_PARTITION_TABLE ||
+	 	           ops[i]->m_type == OPERATION_CONVERT_PARTITION_TABLE)
+	 	 {
+	 	 	 // Device-level operations don't target a specific partition path
+	 	 }
 	 	 else
 	 	 {
 	 	 	 if (ops[i]->get_partition_original().get_path() == path ||
@@ -12770,6 +12775,13 @@ bool Win_GParted_TQt::operations_affect_same_partition( const Operation &first_o
 	if (first_op.m_type == OPERATION_DELETE)
 		return false;
 
+	// Device-level operations affect the whole device, not a specific partition.
+	if (first_op.m_type == OPERATION_CREATE_PARTITION_TABLE ||
+	    first_op.m_type == OPERATION_CONVERT_PARTITION_TABLE ||
+	    second_op.m_type == OPERATION_CREATE_PARTITION_TABLE ||
+	    second_op.m_type == OPERATION_CONVERT_PARTITION_TABLE)
+		return false;
+
 	if (first_op.get_partition_new().get_path() == second_op.get_partition_original().get_path())
 		return true;
 
@@ -12975,6 +12987,8 @@ void Win_GParted_TQt::action_delete()
 		for (int i = 0; i < (int)m_operations.size(); i++)
 		{
 			if (m_operations[i]->m_type != OPERATION_DELETE &&
+			    m_operations[i]->m_type != OPERATION_CREATE_PARTITION_TABLE &&
+			    m_operations[i]->m_type != OPERATION_CONVERT_PARTITION_TABLE &&
 			    m_operations[i]->get_partition_new().get_path() == path)
 			{
 				m_operations.erase( m_operations.begin() + i );
@@ -12986,6 +13000,8 @@ void Win_GParted_TQt::action_delete()
 		for (unsigned int t = 0; t < m_operations.size(); t++)
 		{
 			if (m_operations[t]->m_type != OPERATION_DELETE &&
+			    m_operations[t]->m_type != OPERATION_CREATE_PARTITION_TABLE &&
+			    m_operations[t]->m_type != OPERATION_CONVERT_PARTITION_TABLE &&
 			    m_operations[t]->get_partition_new().status == STAT_NEW)
 			{
 				const int n = m_operations[t]->get_partition_new().partition_number;
