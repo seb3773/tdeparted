@@ -2965,8 +2965,22 @@ Dialog_Progress_TQt::Dialog_Progress_TQt( const std::vector<Device> &devices, co
 	{
 		TQVBoxLayout *dv = new TQVBoxLayout( m_details_container );
 		dv->setMargin( 0 );
-		dv->setSpacing( 0 );
+		dv->setSpacing( 2 );
 
+		/* View mode toggle button */
+		m_btn_view_mode = new TQPushButton( TQString::fromUtf8( _( "Terminal View" ) ), m_details_container );
+		m_btn_view_mode->setToggleButton( true );
+		m_btn_view_mode->setOn( false );
+		m_btn_view_mode->setFlat( true );
+		{
+			TQFont f = m_btn_view_mode->font();
+			f.setBold( true );
+			m_btn_view_mode->setFont( f );
+		}
+		dv->addWidget( m_btn_view_mode );
+		TQObject::connect( m_btn_view_mode, TQT_SIGNAL(clicked()), this, TQT_SLOT(on_view_mode_toggled()) );
+
+		/* Tree view (hierarchical) */
 		m_details_list = new TQListView( m_details_container );
 		m_details_list->setFrameStyle( TQFrame::StyledPanel | TQFrame::Sunken );
 		m_details_list->setMinimumWidth( 700 );
@@ -2981,6 +2995,27 @@ Dialog_Progress_TQt::Dialog_Progress_TQt( const std::vector<Device> &devices, co
 		m_details_list->setAllColumnsShowFocus( true );
 		m_details_list->setRootIsDecorated( true );
 		dv->addWidget( m_details_list, 1 );
+
+		/* Terminal view (white on black, monospace) */
+		m_terminal_view = new TQTextEdit( m_details_container );
+		m_terminal_view->setReadOnly( true );
+		m_terminal_view->setTextFormat( TQt::PlainText );
+		m_terminal_view->setWordWrap( TQTextEdit::NoWrap );
+		m_terminal_view->setFrameStyle( TQFrame::StyledPanel | TQFrame::Sunken );
+		m_terminal_view->setMinimumWidth( 700 );
+		m_terminal_view->setSizePolicy( TQSizePolicy( TQSizePolicy::Expanding, TQSizePolicy::Expanding ) );
+		{
+			TQPalette pal = m_terminal_view->palette();
+			pal.setColor( TQColorGroup::Text, TQt::white );
+			pal.setColor( TQColorGroup::Base, TQt::black );
+			pal.setColor( TQColorGroup::Foreground, TQt::white );
+			pal.setColor( TQColorGroup::Background, TQt::black );
+			m_terminal_view->setPalette( pal );
+			TQFont f( TQString::fromLatin1("monospace"), 10 );
+			m_terminal_view->setFont( f );
+		}
+		dv->addWidget( m_terminal_view, 1 );
+		m_terminal_view->hide();
 	}
 	m_vbox->addWidget( m_details_container, 1 );
 	m_details_container->hide();
@@ -3085,6 +3120,24 @@ void Dialog_Progress_TQt::on_details_toggled( bool on )
 			if (m_compact_height > 0)
 				resize( width(), m_compact_height );
 		}
+	}
+}
+
+void Dialog_Progress_TQt::on_view_mode_toggled()
+{
+	m_terminal_mode = m_btn_view_mode->isOn();
+	if (m_terminal_mode)
+	{
+		m_details_list->hide();
+		m_terminal_view->show();
+		m_btn_view_mode->setText( TQString::fromUtf8( _( "Tree View" ) ) );
+		m_terminal_view->scrollToBottom();
+	}
+	else
+	{
+		m_terminal_view->hide();
+		m_details_list->show();
+		m_btn_view_mode->setText( TQString::fromUtf8( _( "Terminal View" ) ) );
 	}
 }
 
@@ -3523,6 +3576,41 @@ void Dialog_Progress_TQt::on_ui_timeout()
 
 		if (m_details_list && (!it->parent() || it->parent()->isOpen()))
 			m_details_list->ensureItemVisible( it );
+
+		/* Feed terminal view */
+		if (m_terminal_view)
+		{
+			const std::size_t colon1 = upd.treepath.find( ':' );
+			const std::size_t colon2 = (colon1 != Glib::ustring::npos) ? upd.treepath.find( ':', colon1 + 1 ) : Glib::ustring::npos;
+			const bool is_operation = (colon1 == Glib::ustring::npos);   // depth 0: operation
+			const bool is_command   = (colon2 == Glib::ustring::npos && colon1 != Glib::ustring::npos);  // depth 1: command
+			const bool is_output    = (colon2 != Glib::ustring::npos);   // depth 2: stdout/stderr
+
+			if (is_operation && m_terminal_seen.find( upd.treepath ) == m_terminal_seen.end())
+			{
+				m_terminal_seen.insert( upd.treepath );
+				m_terminal_view->append( TQString::fromLatin1("# ") +
+					strip_simple_pango_markup( upd.description ) );
+			}
+			else if (is_command && m_terminal_seen.find( upd.treepath ) == m_terminal_seen.end())
+			{
+				m_terminal_seen.insert( upd.treepath );
+				m_terminal_view->append( TQString::fromLatin1("command: ") +
+					strip_simple_pango_markup( upd.description ) );
+			}
+			else if (is_output)
+			{
+				const unsigned prev_pos = (m_terminal_output_pos.find( upd.treepath ) != m_terminal_output_pos.end())
+					? m_terminal_output_pos[upd.treepath] : 0;
+				const Glib::ustring &full = upd.description;
+				if (full.length() > prev_pos)
+				{
+					const Glib::ustring delta = full.substr( prev_pos );
+					m_terminal_output_pos[upd.treepath] = full.length();
+					m_terminal_view->append( TQString::fromUtf8( delta.c_str() ) );
+				}
+			}
+		}
 	}
 
 	const int curr_op = m_worker->get_current_op();
@@ -5044,7 +5132,8 @@ private slots:
 		if (tqApp)
 			tqApp->processEvents();
 
-		const Glib::ustring flag = c->text(0).utf8().data();
+		const TQCString flag_qc = c->text(0).utf8();
+		const Glib::ustring flag( flag_qc.data() );
 		const bool new_state = c->isOn();
 		m_core.toggle_flag( m_partition, flag, new_state );
 		m_flag_info = m_core.get_available_flags( m_partition );
@@ -5102,7 +5191,8 @@ void Win_GParted_TQt::action_name_partition()
 	                          this );
 	if (dlg.exec() != TQDialog::Accepted)
 		return;
-	const Glib::ustring new_name = dlg.get_text().utf8().data();
+	const TQCString new_name_qc = dlg.get_text().utf8();
+	const Glib::ustring new_name( new_name_qc.data() );
 	if (new_name == m_selected_partition->name)
 		return;
 
@@ -5815,7 +5905,8 @@ void Win_GParted_TQt::action_label_filesystem()
 	                          this );
 	if (dlg.exec() != TQDialog::Accepted)
 		return;
-	const Glib::ustring new_label = dlg.get_text().utf8().data();
+	const TQCString new_label_qc = dlg.get_text().utf8();
+	const Glib::ustring new_label( new_label_qc.data() );
 	if (new_label == filesystem_ptn.get_filesystem_label())
 		return;
 
@@ -6584,8 +6675,21 @@ public:
 	{
 		clear();
 		m_device_length = device_length;
-		m_tot_sep = get_total_separator_px( partitions );
-		set_static_data( partitions, m_visual_partitions, device_length );
+		if (device_length == 0)
+		{
+			// No-media device: show a single "No Media" placeholder
+			m_visual_partitions.push_back( VisualPartition() );
+			VisualPartition &vp = m_visual_partitions.back();
+			vp.partition_ptr = &partitions[0];
+			vp.fraction = 1.0;
+			vp.color = TQColor( 80, 80, 80 );
+			vp.text = TQString::fromUtf8( _("No Media") );
+		}
+		else
+		{
+			m_tot_sep = get_total_separator_px( partitions );
+			set_static_data( partitions, m_visual_partitions, device_length );
+		}
 		recalc();
 		update();
 	}
@@ -10200,6 +10304,7 @@ Dialog_Fstab_Options_TQt::Dialog_Fstab_Options_TQt( const Partition &partition, 
 : TQDialog( parent, 0, true ),
   m_partition( partition ),
   m_edit_dir( 0 ),
+  m_btn_browse_dir( 0 ),
   m_edit_type( 0 ),
   m_edit_opts( 0 ),
   m_spin_freq( 0 ),
@@ -10243,8 +10348,16 @@ Dialog_Fstab_Options_TQt::Dialog_Fstab_Options_TQt( const Partition &partition, 
 	grid->addWidget( le_part, 0, 1 );
 
 	grid->addWidget( new TQLabel( TQString::fromUtf8( _( "Mount point:" ) ), this ), 1, 0 );
-	m_edit_dir = new TQLineEdit( this );
-	grid->addWidget( m_edit_dir, 1, 1 );
+	{
+		TQHBoxLayout *hb_dir = new TQHBoxLayout();
+		hb_dir->setSpacing( 4 );
+		m_edit_dir = new TQLineEdit( this );
+		hb_dir->addWidget( m_edit_dir, 1 );
+		m_btn_browse_dir = new TQPushButton( TQString::fromLatin1("..."), this );
+		m_btn_browse_dir->setFixedWidth( 32 );
+		hb_dir->addWidget( m_btn_browse_dir );
+		grid->addLayout( hb_dir, 1, 1 );
+	}
 
 	grid->addWidget( new TQLabel( TQString::fromUtf8( _( "File system type:" ) ), this ), 2, 0 );
 	m_edit_type = new TQLineEdit( this );
@@ -10286,6 +10399,7 @@ Dialog_Fstab_Options_TQt::Dialog_Fstab_Options_TQt( const Partition &partition, 
 	TQObject::connect( m_btn_save, TQT_SIGNAL(clicked()), this, TQT_SLOT(on_save()) );
 	TQObject::connect( m_btn_fields_help, TQT_SIGNAL(clicked()), this, TQT_SLOT(on_fields_help()) );
 	TQObject::connect( m_btn_syntax_help, TQT_SIGNAL(clicked()), this, TQT_SLOT(on_syntax_help()) );
+	TQObject::connect( m_btn_browse_dir, TQT_SIGNAL(clicked()), this, TQT_SLOT(on_browse_dir()) );
 	TQObject::connect( m_edit_dir, TQT_SIGNAL(textChanged(const TQString&)), this, TQT_SLOT(on_changed()) );
 	TQObject::connect( m_edit_type, TQT_SIGNAL(textChanged(const TQString&)), this, TQT_SLOT(on_changed()) );
 	TQObject::connect( m_edit_opts, TQT_SIGNAL(textChanged(const TQString&)), this, TQT_SLOT(on_changed()) );
@@ -10308,7 +10422,10 @@ TQString Dialog_Fstab_Options_TQt::compute_fsname() const
 void Dialog_Fstab_Options_TQt::load_from_fstab()
 {
 	m_edit_dir->setText( TQString() );
-	m_edit_type->setText( TQString::fromLatin1("auto") );
+	{
+		const Glib::ustring fs_kernel = Utils::get_filesystem_kernel_name( m_partition.fstype );
+		m_edit_type->setText( fs_kernel.empty() ? TQString::fromLatin1("auto") : TQString::fromUtf8( fs_kernel.c_str() ) );
+	}
 	m_edit_opts->setText( TQString::fromLatin1("defaults") );
 	m_spin_freq->setValue( 0 );
 	m_spin_pass->setValue( 0 );
@@ -10501,7 +10618,8 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 		if (tb >= 0 && (cut < 0 || tb < cut))
 			cut = tb;
 		TQString fsname = (cut >= 0) ? t.left( cut ) : t;
-		const std::string fss = fsname.utf8().data();
+		const TQCString fss_qc = fsname.utf8();
+		const std::string fss( fss_qc.data() );
 		if (fss == dev_path)
 		{
 			match_idx = (int)i;
@@ -10559,7 +10677,9 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 		out += TQString::fromLatin1("\n");
 	}
 
+
 	const TQString backup_path = fstab_backup_path_tqt();
+	const TQCString backup_path_qc = backup_path.utf8();
 	{
 		int in_fd = open( fstab_path, O_RDONLY | O_CLOEXEC );
 		if (in_fd < 0)
@@ -10568,10 +10688,10 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 			        TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno );
 			return false;
 		}
-		int out_fd = open( backup_path.utf8().data(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644 );
+		int out_fd = open( backup_path_qc.data(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644 );
 		if (out_fd < 0)
 		{
-			close( in_fd );
+			::close( in_fd );
 			error = TQString::fromUtf8( _( "Failed to create fstab backup." ) ) +
 			        TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno );
 			return false;
@@ -10584,8 +10704,8 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 			{
 				if (errno == EINTR)
 					continue;
-				close( in_fd );
-				close( out_fd );
+				::close( in_fd );
+				::close( out_fd );
 				error = TQString::fromUtf8( _( "Failed to read /etc/fstab for backup." ) ) +
 				        TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno );
 				return false;
@@ -10594,16 +10714,16 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 				break;
 			if (!write_all_fd_tqt( out_fd, buf, (size_t)n ))
 			{
-				close( in_fd );
-				close( out_fd );
+				::close( in_fd );
+				::close( out_fd );
 				error = TQString::fromUtf8( _( "Failed to write fstab backup." ) ) +
 				        TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno );
 				return false;
 			}
 		}
 		(void)fsync( out_fd );
-		close( in_fd );
-		close( out_fd );
+		::close( in_fd );
+		::close( out_fd );
 	}
 
 	char tmp_template[] = "/etc/.fstab.tdeparted.XXXXXX";
@@ -10620,7 +10740,7 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 	{
 		error = TQString::fromUtf8( _( "Failed to write temporary fstab file." ) ) +
 		        TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno );
-		close( tfd );
+		::close( tfd );
 		unlink( tmp_template );
 		return false;
 	}
@@ -10628,11 +10748,11 @@ bool Dialog_Fstab_Options_TQt::save_fstab_update( const TQString &new_line, TQSt
 	{
 		error = TQString::fromUtf8( _( "Failed to sync temporary fstab file." ) ) +
 		        TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno );
-		close( tfd );
+		::close( tfd );
 		unlink( tmp_template );
 		return false;
 	}
-	close( tfd );
+	::close( tfd );
 
 	if (rename( tmp_template, fstab_path ) != 0)
 	{
@@ -10806,6 +10926,17 @@ void Dialog_Fstab_Options_TQt::on_cancel()
 	reject();
 }
 
+void Dialog_Fstab_Options_TQt::on_browse_dir()
+{
+	TQString start_dir = m_edit_dir->text().stripWhiteSpace();
+	if (start_dir.isEmpty())
+		start_dir = TQString::fromLatin1("/mnt");
+	const TQCString cap = TQString::fromUtf8( _( "Select mount point" ) ).utf8();
+	const TQString dir = TQFileDialog::getExistingDirectory( start_dir, this, cap.data() );
+	if (!dir.isEmpty())
+		m_edit_dir->setText( dir );
+}
+
 void Dialog_Fstab_Options_TQt::on_save()
 {
 	TQString err;
@@ -10820,6 +10951,114 @@ void Dialog_Fstab_Options_TQt::on_save()
 		TQMessageBox::critical( this, TQString::fromUtf8( _( "Mount options / fstab" ) ), err, TQMessageBox::Ok, TQMessageBox::NoButton );
 		return;
 	}
+
+	// Check if partition is currently mounted and if mountpoint differs from fstab entry
+	Mount_Info::load_cache();
+	const std::string dev_path = m_partition.get_path();
+	const TQString fstab_dir = m_edit_dir->text().stripWhiteSpace();
+	const TQCString fstab_dir_qc = fstab_dir.utf8();
+	const Glib::ustring fstab_dir_u( fstab_dir_qc.data() );
+
+	if (Mount_Info::is_dev_mounted( dev_path ) && !fstab_dir.isEmpty())
+	{
+		const std::vector<Glib::ustring> &current_mps = Mount_Info::get_mounted_mountpoints( dev_path );
+		bool already_mounted_there = false;
+		for (unsigned i = 0; i < current_mps.size(); i++)
+		{
+			if (current_mps[i] == fstab_dir_u)
+			{
+				already_mounted_there = true;
+				break;
+			}
+		}
+
+		if (!already_mounted_there)
+		{
+			TQString cur_mp;
+			for (unsigned i = 0; i < current_mps.size(); i++)
+			{
+				if (i > 0) cur_mp += TQString::fromLatin1(", ");
+				cur_mp += TQString::fromUtf8( current_mps[i].c_str() );
+			}
+			TQString msg = TQString::fromUtf8( _( "The fstab entry has been saved.\n\n"
+			                                     "The partition is currently mounted at:\n  %1\n\n"
+			                                     "The fstab entry specifies mount point:\n  %2\n\n"
+			                                     "Would you like to unmount and remount at the new location?" ) )
+				.arg( cur_mp )
+				.arg( fstab_dir );
+
+			int choice = TQMessageBox::question( this,
+				TQString::fromUtf8( _( "Mount point mismatch" ) ),
+				msg,
+				TQString::fromUtf8( _( "Unmount && Remount" ) ),
+				TQString::fromUtf8( _( "Keep current mount" ) ),
+				TQString() );
+
+			if (choice == 0)
+			{
+				// Unmount
+				Glib::ustring umount_error;
+				bool ok = unmount_partition_tqt( m_partition, umount_error );
+				if (!ok)
+				{
+					TQMessageBox::warning( this,
+						TQString::fromUtf8( _( "Unmount failed" ) ),
+						TQString::fromUtf8( umount_error.c_str() ),
+						TQMessageBox::Ok, TQMessageBox::NoButton );
+					accept();
+					return;
+				}
+
+				// Ensure mount point directory exists
+				struct stat st;
+				if (stat( fstab_dir_qc.data(), &st ) != 0 || !S_ISDIR( st.st_mode ))
+				{
+					if (mkdir( fstab_dir_qc.data(), 0755 ) != 0 && errno != EEXIST)
+					{
+						TQMessageBox::warning( this,
+							TQString::fromUtf8( _( "Remount failed" ) ),
+							TQString::fromUtf8( _( "Cannot create mount point directory:" ) ) +
+							TQString::fromLatin1(" ") + errno_to_tqstring_tqt( errno ),
+							TQMessageBox::Ok, TQMessageBox::NoButton );
+						accept();
+						return;
+					}
+				}
+
+				// Remount
+				Glib::ustring output, mount_error;
+				Glib::ustring cmd = "mount -v " + Glib::shell_quote( dev_path ) + " " + Glib::shell_quote( fstab_dir_u );
+				bool mount_ok = !Utils::execute_command( cmd, output, mount_error );
+				if (!mount_ok)
+				{
+					// Retry with -t flag
+					const Glib::ustring type = Utils::get_filesystem_kernel_name( m_partition.fstype );
+					if (!type.empty())
+					{
+						cmd = "mount -v -t " + Glib::shell_quote( type ) + " " +
+						      Glib::shell_quote( dev_path ) + " " + Glib::shell_quote( fstab_dir_u );
+						mount_ok = !Utils::execute_command( cmd, output, mount_error );
+					}
+				}
+				if (!mount_ok)
+				{
+					TQMessageBox::warning( this,
+						TQString::fromUtf8( _( "Remount failed" ) ),
+						TQString::fromUtf8( mount_error.c_str() ),
+						TQMessageBox::Ok, TQMessageBox::NoButton );
+				}
+				else
+				{
+					TQMessageBox::information( this,
+						TQString::fromUtf8( _( "Remounted" ) ),
+						TQString::fromUtf8( _( "Partition successfully remounted at:" ) ) +
+						TQString::fromLatin1(" ") + fstab_dir,
+						TQMessageBox::Ok, TQMessageBox::NoButton );
+				}
+			}
+		}
+	}
+
 	accept();
 }
 
@@ -10833,7 +11072,8 @@ void Win_GParted_TQt::action_partition_mount_options()
 		return;
 
 	Dialog_Fstab_Options_TQt dlg( *m_selected_partition, this );
-	dlg.exec();
+	if (dlg.exec() == TQDialog::Accepted)
+		menu_device_refresh_devices();
 }
 
 void Win_GParted_TQt::action_partition_wipe()
@@ -11162,14 +11402,16 @@ void Win_GParted_TQt::refresh_device_information()
 	}
 
 	const Device &d = m_devices[m_current_device];
-	const Glib::ustring size_str = Utils::format_size( d.length, d.sector_size );
+	const Glib::ustring size_str = d.no_media ? Glib::ustring( _("No Media") ) : Utils::format_size( d.length, d.sector_size );
 
 	m_lbl_dev_model->setText( TQString::fromUtf8( d.model.c_str() ) );
 	m_lbl_dev_serial->setText( TQString::fromUtf8( d.serial_number.c_str() ) );
 	if (m_lbl_dev_type)
 	{
 		TQString dtype = TQString::fromUtf8( _( "Unknown" ) );
-		switch (detect_device_type_tqt( d.get_path() ))
+		if (d.no_media)
+			dtype = TQString::fromUtf8( _( "No Media" ) );
+		else switch (detect_device_type_tqt( d.get_path() ))
 		{
 			case DEVTYPE_USB_STORAGE: dtype = TQString::fromUtf8( _( "USB storage" ) ); break;
 			case DEVTYPE_NVME_SSD:    dtype = TQString::fromUtf8( _( "NVMe SSD" ) ); break;
@@ -11926,8 +12168,14 @@ void Win_GParted_TQt::refresh_devices()
 	for (unsigned int i = 0; i < m_devices.size(); i++)
 	{
 		const Device &d = m_devices[i];
-		const Glib::ustring size_str = Utils::format_size( d.length, d.sector_size );
-		const Glib::ustring label = d.get_path() + " (" + size_str + ")";
+		Glib::ustring label;
+		if (d.no_media)
+			label = d.get_path() + " (" + _("No Media") + ")";
+		else
+		{
+			const Glib::ustring size_str = Utils::format_size( d.length, d.sector_size );
+			label = d.get_path() + " (" + size_str + ")";
+		}
 		m_combo_devices->insertItem( TQString::fromUtf8( label.c_str() ) );
 		if (m_menu_gparted_devices)
 		{
@@ -12242,6 +12490,7 @@ void Win_GParted_TQt::update_valid_actions()
 	const bool have_device = (m_current_device >= 0 && m_current_device < (int)m_devices.size());
 	const bool have_sel = (m_selected_partition != 0);
 	const bool readonly = have_device ? m_devices[m_current_device].readonly : true;
+	const bool no_media = have_device ? m_devices[m_current_device].no_media : false;
 	const bool have_ops = (m_operations.size() > 0);
 	bool allow_detach_virtual = false;
 	if (have_device && !have_ops)
@@ -12447,6 +12696,14 @@ void Win_GParted_TQt::update_valid_actions()
 		;
 	}
 
+	// No partition actions allowed on no-media devices
+	if (no_media)
+	{
+		allow_new = allow_delete = allow_resize = allow_copy = allow_paste = false;
+		allow_format = allow_toggle_crypt = allow_toggle_fs = allow_mount_on = false;
+		allow_name = allow_flags = allow_check = allow_label = allow_uuid = false;
+	}
+
 	if (m_menu_partition)
 	{
 		const bool allow_image_disk = have_device && !have_ops;
@@ -12476,9 +12733,9 @@ void Win_GParted_TQt::update_valid_actions()
 			}
 		}
 		if (m_menu_device && m_menu_device_create_image_id != -1)
-			m_menu_device->setItemEnabled( m_menu_device_create_image_id, allow_image_disk );
+			m_menu_device->setItemEnabled( m_menu_device_create_image_id, allow_image_disk && !no_media );
 		if (m_menu_device && m_menu_device_restore_image_id != -1)
-			m_menu_device->setItemEnabled( m_menu_device_restore_image_id, allow_image_disk );
+			m_menu_device->setItemEnabled( m_menu_device_restore_image_id, allow_image_disk && !no_media );
 		if (m_menu_partition_create_image_id != -1)
 			m_menu_partition->setItemEnabled( m_menu_partition_create_image_id, allow_image_part );
 		if (m_menu_partition_restore_image_id != -1)
@@ -12575,19 +12832,19 @@ void Win_GParted_TQt::update_valid_actions()
 	}
 
 	if (m_menu_device && m_menu_device_create_table_id != -1)
-		m_menu_device->setItemEnabled( m_menu_device_create_table_id, have_device && !have_ops );
+		m_menu_device->setItemEnabled( m_menu_device_create_table_id, have_device && !have_ops && !no_media );
 	if (m_menu_device && m_menu_device_convert_table_id != -1)
-		m_menu_device->setItemEnabled( m_menu_device_convert_table_id, have_device && !have_ops );
+		m_menu_device->setItemEnabled( m_menu_device_convert_table_id, have_device && !have_ops && !no_media );
 	if (m_menu_device && m_menu_device_secure_erase_id != -1)
-		m_menu_device->setItemEnabled( m_menu_device_secure_erase_id, have_device && !have_ops );
+		m_menu_device->setItemEnabled( m_menu_device_secure_erase_id, have_device && !have_ops && !no_media );
 	if (m_menu_device && m_menu_device_load_image_id != -1)
 		m_menu_device->setItemEnabled( m_menu_device_load_image_id, !have_ops );
 	if (m_menu_device && m_menu_device_smart_infos_id != -1)
 		m_menu_device->setItemEnabled( m_menu_device_smart_infos_id, have_device );
 	if (m_menu_device && m_menu_device_simple_benchmark_id != -1)
-		m_menu_device->setItemEnabled( m_menu_device_simple_benchmark_id, have_device );
+		m_menu_device->setItemEnabled( m_menu_device_simple_benchmark_id, have_device && !no_media );
 	if (m_menu_device && m_menu_device_clone_id != -1)
-		m_menu_device->setItemEnabled( m_menu_device_clone_id, have_device && !have_ops );
+		m_menu_device->setItemEnabled( m_menu_device_clone_id, have_device && !have_ops && !no_media );
 	if (m_menu_device && m_menu_device_detach_virtual_id != -1)
 		m_menu_device->setItemEnabled( m_menu_device_detach_virtual_id, allow_detach_virtual );
 	if (m_btn_undo)
@@ -13617,16 +13874,91 @@ static TQString build_pending_ops_bash_script_tqt( const OperationVector &ops )
 						out += TQString::fromLatin1("-L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ");
 					out += part_ref + TQString::fromLatin1("\n\n");
 				}
-				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32") || fss == TQString::fromLatin1("vfat"))
+				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32"))
 				{
-					out += TQString::fromLatin1("mkfs.vfat ");
+					out += TQString::fromLatin1("mkfs.fat ");
 					if (fss == TQString::fromLatin1("fat16"))
 						out += TQString::fromLatin1("-F 16 ");
-					else if (fss == TQString::fromLatin1("fat32"))
+					else
 						out += TQString::fromLatin1("-F 32 ");
+					out += TQString::fromLatin1("-v -I ");
 					if (!label.isEmpty())
 						out += TQString::fromLatin1("-n \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ");
 					out += part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("btrfs"))
+				{
+					out += TQString::fromLatin1("mkfs.btrfs -f");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("xfs"))
+				{
+					out += TQString::fromLatin1("mkfs.xfs -f");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("ntfs"))
+				{
+					out += TQString::fromLatin1("mkntfs -Q -v -F");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("reiserfs"))
+				{
+					out += TQString::fromLatin1("mkreiserfs -f -f");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" --label \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("reiser4"))
+				{
+					out += TQString::fromLatin1("mkfs.reiser4 --force --yes");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" --label \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("jfs"))
+				{
+					out += TQString::fromLatin1("mkfs.jfs -q");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("nilfs2"))
+				{
+					out += TQString::fromLatin1("mkfs.nilfs2");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("f2fs"))
+				{
+					out += TQString::fromLatin1("mkfs.f2fs");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -l \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("exfat"))
+				{
+					out += TQString::fromLatin1("mkfs.exfat");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("hfsplus") || fss == TQString::fromLatin1("hfs+"))
+				{
+					out += TQString::fromLatin1("mkfs.hfsplus");
+					if (!label.isEmpty())
+						out += TQString::fromLatin1(" -v \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"");
+					out += TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("minix"))
+				{
+					out += TQString::fromLatin1("mkfs.minix -3 ") + part_ref + TQString::fromLatin1("\n\n");
 				}
 				else
 				{
@@ -13646,9 +13978,41 @@ static TQString build_pending_ops_bash_script_tqt( const OperationVector &ops )
 					out += TQString::fromLatin1("e2fsck -f ") + part_ref + TQString::fromLatin1("\n");
 					out += TQString::fromLatin1("resize2fs ") + part_ref + TQString::fromLatin1(" ") + format_bytes_to_g_suffix_tqt( bytes ) + TQString::fromLatin1("\n\n");
 				}
-				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32") || fss == TQString::fromLatin1("vfat"))
+				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32"))
 				{
 					out += TQString::fromLatin1("fatresize -s ") + TQString::number( (unsigned long long)bytes ) + TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("ntfs"))
+				{
+					out += TQString::fromLatin1("ntfsresize --force --force -s ") + TQString::number( (unsigned long long)bytes ) + TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("reiserfs"))
+				{
+					out += TQString::fromLatin1("echo y | resize_reiserfs -s ") + TQString::number( (unsigned long long)bytes ) + TQString::fromLatin1(" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("btrfs"))
+				{
+					out += TQString::fromLatin1("# btrfs resize requires mount; adjust mount point as needed\n");
+					out += TQString::fromLatin1("# btrfs filesystem resize <devid>:max <mountpoint>\n\n");
+				}
+				else if (fss == TQString::fromLatin1("xfs"))
+				{
+					out += TQString::fromLatin1("# xfs resize requires mount; adjust mount point as needed\n");
+					out += TQString::fromLatin1("# xfs_growfs <mountpoint>\n\n");
+				}
+				else if (fss == TQString::fromLatin1("jfs"))
+				{
+					out += TQString::fromLatin1("# jfs resize requires mount; adjust mount point as needed\n");
+					out += TQString::fromLatin1("# mount -v -t jfs -o remount,resize <device> <mountpoint>\n\n");
+				}
+				else if (fss == TQString::fromLatin1("nilfs2"))
+				{
+					out += TQString::fromLatin1("# nilfs2 resize requires mount; adjust mount point as needed\n");
+					out += TQString::fromLatin1("# nilfs-resize <device> <size>\n\n");
+				}
+				else if (fss == TQString::fromLatin1("f2fs"))
+				{
+					out += TQString::fromLatin1("# f2fs resize not supported via simple command\n\n");
 				}
 				else
 				{
@@ -13711,6 +14075,158 @@ static TQString build_pending_ops_bash_script_tqt( const OperationVector &ops )
 			default:
 				out += TQString::fromLatin1("# Unsupported operation type\n\n");
 				break;
+
+			case OPERATION_CHECK:
+			{
+				const Partition &fsp = op.get_partition_original().get_filesystem_partition();
+				const TQString fss = TQString::fromUtf8( fsp.get_filesystem_string().c_str() );
+				if (fss == TQString::fromLatin1("ext2") || fss == TQString::fromLatin1("ext3") || fss == TQString::fromLatin1("ext4"))
+					out += TQString::fromLatin1("e2fsck -f -y -v -C 0 ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32"))
+					out += TQString::fromLatin1("fsck.fat -a -w -v ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("btrfs"))
+					out += TQString::fromLatin1("btrfs check ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("xfs"))
+					out += TQString::fromLatin1("xfs_repair -v ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("ntfs"))
+					out += TQString::fromLatin1("ntfsresize -i -f -v ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("reiserfs"))
+					out += TQString::fromLatin1("reiserfsck --yes --fix-fixable --quiet ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("reiser4"))
+					out += TQString::fromLatin1("fsck.reiser4 --yes --fix --quiet ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("jfs"))
+					out += TQString::fromLatin1("jfs_fsck -f ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("nilfs2"))
+					out += TQString::fromLatin1("# nilfs2 check: mount and unmount to replay log\n\n");
+				else if (fss == TQString::fromLatin1("f2fs"))
+					out += TQString::fromLatin1("fsck.f2fs -f -a ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("exfat"))
+					out += TQString::fromLatin1("fsck.exfat -y -v ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("hfsplus") || fss == TQString::fromLatin1("hfs+"))
+					out += TQString::fromLatin1("fsck.hfsplus -f -y ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("minix"))
+					out += TQString::fromLatin1("fsck.minix ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("linux-swap"))
+					out += TQString::fromLatin1("mkswap -c ") + part_ref + TQString::fromLatin1("\n\n");
+				else
+					out += TQString::fromLatin1("# Unsupported check filesystem: ") + fss + TQString::fromLatin1("\n\n");
+				break;
+			}
+
+			case OPERATION_COPY:
+			{
+				const Partition &pn = op.get_partition_new();
+				const TQString fss = TQString::fromUtf8( pn.get_filesystem_string().c_str() );
+				out += TQString::fromLatin1("# Copy partition: use dd or partition copy tool\n");
+				out += TQString::fromLatin1("# dd if=<source> of=") + part_ref + TQString::fromLatin1(" bs=64M conv=noerror,sync status=progress\n\n");
+				break;
+			}
+
+			case OPERATION_LABEL_FILESYSTEM:
+			{
+				const Partition &fsp = op.get_partition_new().get_filesystem_partition();
+				const TQString fss = TQString::fromUtf8( fsp.get_filesystem_string().c_str() );
+				const TQString label = fsp.filesystem_label_known() ? TQString::fromUtf8( fsp.get_filesystem_label().c_str() ) : TQString();
+				if (fss == TQString::fromLatin1("ext2") || fss == TQString::fromLatin1("ext3") || fss == TQString::fromLatin1("ext4"))
+				{
+					out += TQString::fromLatin1("e2label ") + part_ref + TQString::fromLatin1(" \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"\n\n");
+				}
+				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32"))
+				{
+					if (label.isEmpty())
+						out += TQString::fromLatin1("mlabel -c -i ") + part_ref + TQString::fromLatin1(" ::\n\n");
+					else
+						out += TQString::fromLatin1("fatlabel ") + part_ref + TQString::fromLatin1(" \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"\n\n");
+				}
+				else if (fss == TQString::fromLatin1("btrfs"))
+				{
+					out += TQString::fromLatin1("btrfs filesystem label ") + part_ref + TQString::fromLatin1(" \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"\n\n");
+				}
+				else if (fss == TQString::fromLatin1("xfs"))
+				{
+					if (label.isEmpty())
+						out += TQString::fromLatin1("xfs_admin -L -- ") + part_ref + TQString::fromLatin1("\n\n");
+					else
+						out += TQString::fromLatin1("xfs_admin -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("ntfs"))
+				{
+					out += TQString::fromLatin1("ntfslabel --force ") + part_ref + TQString::fromLatin1(" \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"\n\n");
+				}
+				else if (fss == TQString::fromLatin1("reiserfs"))
+				{
+					out += TQString::fromLatin1("reiserfstune --label \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("jfs"))
+				{
+					out += TQString::fromLatin1("jfs_tune -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("nilfs2"))
+				{
+					out += TQString::fromLatin1("nilfs-tune -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("f2fs"))
+				{
+					out += TQString::fromLatin1("# f2fs label change not supported via simple command\n\n");
+				}
+				else if (fss == TQString::fromLatin1("exfat"))
+				{
+					out += TQString::fromLatin1("tune.exfat -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("linux-swap"))
+				{
+					out += TQString::fromLatin1("swaplabel -L \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\" ") + part_ref + TQString::fromLatin1("\n\n");
+				}
+				else if (fss == TQString::fromLatin1("lvm2 pv"))
+				{
+					out += TQString::fromLatin1("lvrename ") + part_ref + TQString::fromLatin1(" \"") + bash_escape_double_quotes_tqt( label ) + TQString::fromLatin1("\"\n\n");
+				}
+				else
+					out += TQString::fromLatin1("# Unsupported label filesystem: ") + fss + TQString::fromLatin1("\n\n");
+				break;
+			}
+
+			case OPERATION_CHANGE_UUID:
+			{
+				const Partition &fsp = op.get_partition_new().get_filesystem_partition();
+				const TQString fss = TQString::fromUtf8( fsp.get_filesystem_string().c_str() );
+				if (fss == TQString::fromLatin1("ext2") || fss == TQString::fromLatin1("ext3") || fss == TQString::fromLatin1("ext4"))
+					out += TQString::fromLatin1("tune2fs -U random ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("fat16") || fss == TQString::fromLatin1("fat32"))
+					out += TQString::fromLatin1("mlabel -s -n -i ") + part_ref + TQString::fromLatin1(" ::\n\n");
+				else if (fss == TQString::fromLatin1("btrfs"))
+					out += TQString::fromLatin1("btrfstune -f -u ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("xfs"))
+					out += TQString::fromLatin1("xfs_admin -U generate ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("ntfs"))
+					out += TQString::fromLatin1("ntfslabel --new-serial ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("reiserfs"))
+					out += TQString::fromLatin1("reiserfstune -u random ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("jfs"))
+					out += TQString::fromLatin1("jfs_tune -U random ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("nilfs2"))
+					out += TQString::fromLatin1("nilfs-tune -U random ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("exfat"))
+					out += TQString::fromLatin1("tune.exfat -I ") + part_ref + TQString::fromLatin1("\n\n");
+				else if (fss == TQString::fromLatin1("linux-swap"))
+					out += TQString::fromLatin1("swaplabel -U random ") + part_ref + TQString::fromLatin1("\n\n");
+				else
+					out += TQString::fromLatin1("# Unsupported change UUID filesystem: ") + fss + TQString::fromLatin1("\n\n");
+				break;
+			}
+
+			case OPERATION_NAME_PARTITION:
+			{
+				const Partition &pn = op.get_partition_new();
+				const TQString name = TQString::fromUtf8( pn.name.c_str() );
+				const TQString dev = TQString::fromUtf8( pn.device_path.c_str() );
+				const int pnum = pn.partition_number;
+				if (name.isEmpty())
+					out += TQString::fromLatin1("parted -s \"") + dev + TQString::fromLatin1("\" name ") + TQString::number( pnum ) + TQString::fromLatin1(" \"\"\n\n");
+				else
+					out += TQString::fromLatin1("parted -s \"") + dev + TQString::fromLatin1("\" name ") + TQString::number( pnum ) + TQString::fromLatin1(" \"") + bash_escape_double_quotes_tqt( name ) + TQString::fromLatin1("\"\n\n");
+				break;
+			}
 		}
 	}
 
@@ -13863,7 +14379,7 @@ void Win_GParted_TQt::refresh_details_table()
 	const Device &d = (m_operations.size() > 0) ? m_display_device : m_devices[m_current_device];
 	if (m_details_device_label)
 	{
-		const Glib::ustring size_str = Utils::format_size( d.length, d.sector_size );
+		const Glib::ustring size_str = d.no_media ? Glib::ustring( _("No Media") ) : Utils::format_size( d.length, d.sector_size );
 		TQString header = TQString::fromUtf8( d.model.c_str() );
 		if (!size_str.empty())
 			header += TQString::fromLatin1(" - ") + TQString::fromUtf8( size_str.c_str() );

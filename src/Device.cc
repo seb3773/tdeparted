@@ -39,7 +39,8 @@ void Device::Reset()
 	serial_number = "";
 	disktype = "";
 	sector_size = max_prims = highest_busy = 0 ;
-	readonly = false ; 	
+	readonly = false ;
+	no_media = false ;
 	max_partition_name_length = 0;
 }
 
@@ -57,6 +58,7 @@ Device Device::get_copy_without_partitions() const
 	new_device.max_prims                 = this->max_prims;
 	new_device.highest_busy              = this->highest_busy;
 	new_device.readonly                  = this->readonly;
+	new_device.no_media                  = this->no_media;
 	new_device.path                      = this->path;
 	new_device.max_partition_name_length = this->max_partition_name_length;
 	return new_device;                                    // (3) Return by value.

@@ -295,6 +295,18 @@ void GParted_Core::set_devices_thread( std::vector<Device> * pdevices )
 		devices.push_back( temp_device );
 	}
 
+	// Discover no-media devices (controllers with no disk present)
+	{
+		std::vector<Glib::ustring> no_media_paths = discover_no_media_devices( device_paths );
+		for ( unsigned int t = 0; t < no_media_paths.size(); t++ )
+		{
+			set_thread_status_message( Glib::ustring::compose( _("Detecting %1"), no_media_paths[t] ) );
+			Device temp_device;
+			set_device_from_disk_no_media( temp_device, no_media_paths[t] );
+			devices.push_back( temp_device );
+		}
+	}
+
 	set_thread_status_message("") ;
 	g_idle_add((GSourceFunc)_mainquit, nullptr);
 }
@@ -4362,6 +4374,132 @@ bool GParted_Core::useable_device(const PedDevice* lp_device)
 	}
 
 	return success;
+}
+
+// Scan /sys/block for block devices with size=0 that have a /dev node.
+// These are controllers (e.g. USB-SATA adapters) with no media present.
+// Returns device paths not already in existing_paths.
+std::vector<Glib::ustring> GParted_Core::discover_no_media_devices(const std::vector<Glib::ustring> &existing_paths)
+{
+	std::vector<Glib::ustring> result;
+	Glib::Dir dir( "/sys/block" );
+	Glib::ustring name;
+	while ( (name = dir.read_name()) != "" )
+	{
+		// Skip loop and zram devices
+		if (name.compare(0, 4, "loop") == 0 || name.compare(0, 4, "zram") == 0)
+			continue;
+
+		Glib::ustring dev_path = "/dev/" + name;
+
+		// Skip if already discovered as a normal device
+		bool already = false;
+		for (unsigned int i = 0; i < existing_paths.size(); i++)
+		{
+			if (existing_paths[i] == dev_path)
+			{
+				already = true;
+				break;
+			}
+		}
+		if (already)
+			continue;
+
+		// Check /dev node exists
+		if (! Glib::file_test(dev_path, Glib::FILE_TEST_EXISTS))
+			continue;
+
+		// Read size (in 512-byte sectors) from sysfs
+		Glib::ustring size_path = "/sys/block/" + name + "/size";
+		std::ifstream ifs( size_path.c_str() );
+		if (! ifs)
+			continue;
+		unsigned long long sz = 0;
+		ifs >> sz;
+		ifs.close();
+
+		// Only interested in size=0 (no media)
+		if (sz != 0)
+			continue;
+
+		// Verify it's removable (skip virtual block devs with size 0)
+		Glib::ustring rem_path = "/sys/block/" + name + "/removable";
+		std::ifstream rem_ifs( rem_path.c_str() );
+		if (! rem_ifs)
+			continue;
+		int removable = 0;
+		rem_ifs >> removable;
+		rem_ifs.close();
+		if (! removable)
+			continue;
+
+		result.push_back( dev_path );
+	}
+	return result;
+}
+
+// Populate a Device object for a no-media block device using sysfs info.
+// libparted cannot open these devices, so we read from /sys/block/<name>/.
+void GParted_Core::set_device_from_disk_no_media( Device & device, const Glib::ustring & device_path )
+{
+	device.Reset();
+	device.set_path( device_path );
+	device.no_media = true;
+	device.length = 0;
+	device.sector_size = 512;  // Default assumption
+	device.disktype = "none";
+	device.max_prims = 0;
+	device.readonly = true;
+
+	// Extract kernel name from path (e.g. "/dev/sdc" -> "sdc")
+	Glib::ustring kname = device_path.substr( 5 );  // skip "/dev/"
+
+	// Read model from /sys/block/<name>/device/model
+	Glib::ustring model_path = "/sys/block/" + kname + "/device/model";
+	std::ifstream mifs( model_path.c_str() );
+	if (mifs)
+	{
+		std::string m;
+		std::getline( mifs, m );
+		mifs.close();
+		// Trim trailing whitespace
+		while (!m.empty() && (m[m.size()-1] == ' ' || m[m.size()-1] == '\t' || m[m.size()-1] == '\n'))
+			m.resize( m.size() - 1 );
+		if (!m.empty())
+		{
+			// Also read vendor
+			Glib::ustring vendor_path = "/sys/block/" + kname + "/device/vendor";
+			std::ifstream vifs( vendor_path.c_str() );
+			Glib::ustring vendor;
+			if (vifs)
+			{
+				std::string v;
+				std::getline( vifs, v );
+				vifs.close();
+				while (!v.empty() && (v[v.size()-1] == ' ' || v[v.size()-1] == '\t' || v[v.size()-1] == '\n'))
+					v.resize( v.size() - 1 );
+				if (!v.empty())
+					vendor = v + " ";
+			}
+			device.model = vendor + Glib::ustring( m.begin(), m.end() );
+		}
+	}
+	if (device.model.empty())
+		device.model = _("No Media");
+
+	// Create a single "no media" partition placeholder
+	Partition *partition_temp = new Partition();
+	partition_temp->Set( device_path,
+	                     Utils::get_filesystem_string( FS_UNALLOCATED ),
+	                     1,                    // partition number
+	                     TYPE_UNPARTITIONED,
+	                     FS_UNALLOCATED,
+	                     0LL,                  // sector_start
+	                     0LL,                  // sector_end (zero-length)
+	                     device.sector_size,
+	                     false,
+	                     false );
+	device.partitions.push_back_adopt( partition_temp );
 }
 
 
