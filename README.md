@@ -161,3 +161,13 @@ The resulting file is:
 ## Repository notes
 
 The legacy upstream README of gparted is kept as a reference in `upstream/README.gparted`.
+
+
+## Screenshots
+
+![Screenshot 1](./screenshots/screenshot_1.jpg)
+![Screenshot 2](./screenshots/screenshot_2.jpg)
+![Screenshot 3](./screenshots/screenshot_3.jpg)
+![Screenshot 4](./screenshots/screenshot_4.jpg)
+![Screenshot 4](./screenshots/screenshot_5.jpg)
+![Screenshot 4](./screenshots/screenshot_6.jpg)
