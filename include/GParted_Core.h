@@ -89,6 +89,7 @@ private:
 	void set_thread_status_message( Glib::ustring msg ) ;
 	static Glib::ustring get_partition_path(const PedPartition *lp_partition);
 	void set_device_from_disk( Device & device, const Glib::ustring & device_path );
+	void set_device_from_disk_no_media( Device & device, const Glib::ustring & device_path );
 	void set_device_serial_number( Device & device );
 	void set_device_partitions( Device & device, PedDevice* lp_device, PedDisk* lp_disk ) ;
 	void set_device_one_partition( Device & device, PedDevice * lp_device, FSType fstype,
@@ -238,6 +239,7 @@ private:
 	static bool commit_to_os( PedDisk* lp_disk, std::time_t timeout );
 	static void settle_device( std::time_t timeout );
 	static bool useable_device(const PedDevice* lp_device);
+	static std::vector<Glib::ustring> discover_no_media_devices(const std::vector<Glib::ustring> &existing_paths);
 	static PedPartition* get_lp_partition( const PedDisk* lp_disk, const Partition & partition );
 
 	static PedExceptionOption ped_exception_handler( PedException * e ) ;

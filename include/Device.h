@@ -60,6 +60,7 @@ public:
 	bool readonly;  // Must changes to the partition table be prevented because the OS
 	                // can't be informed of the changes while other partitions are
 			// busy.
+	bool no_media;  // Controller recognised but no disk/media present (e.g. empty USB-SATA adapter)
 
 private:
 	Glib::ustring path;

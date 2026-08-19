@@ -48,7 +48,7 @@
 #include <tqmutex.h>
 
 #include <map>
-
+#include <set>
 #include <vector>
 
 namespace GParted
@@ -120,6 +120,7 @@ private slots:
 	void menu_gparted_devices_select( int id );
 	void menu_partition_format_to( int id );
 	void action_new();
+	void show_disklabel_unrecognized_tqt( const Glib::ustring &device_name );
 	void action_delete();
 	void action_resize_move();
 	void action_copy();
@@ -388,6 +389,7 @@ public:
 
 private slots:
 	void on_details_toggled( bool on );
+	void on_view_mode_toggled();
 	void on_start_apply();
 	void on_cancel();
 	void on_cancel_timeout();
@@ -426,6 +428,11 @@ protected:
 	TQPushButton *m_expander_button;  // ▶/▼ expander toggle
 	TQWidget *m_details_container;    // container for the scrolled treeview
 	TQListView *m_details_list;       // treeview for operation details
+	TQPushButton *m_btn_view_mode;    // toggle tree / terminal view
+	TQTextEdit *m_terminal_view;      // terminal-style output (white on black)
+	bool m_terminal_mode;             // true = terminal view, false = tree view
+	std::set<Glib::ustring> m_terminal_seen;  // treepaths already output to terminal
+	std::map<Glib::ustring, unsigned> m_terminal_output_pos;  // chars already appended per output treepath
 	TQPushButton *m_btn_cancel;
 	TQPushButton *m_btn_save;
 	TQPushButton *m_btn_copy;
@@ -584,6 +591,7 @@ private slots:
 	void on_syntax_help();
 	void on_save();
 	void on_cancel();
+	void on_browse_dir();
 
 private:
 	TQString compute_fsname() const;
@@ -596,6 +604,7 @@ private:
 
 	const Partition &m_partition;
 	TQLineEdit *m_edit_dir;
+	TQPushButton *m_btn_browse_dir;
 	TQLineEdit *m_edit_type;
 	TQLineEdit *m_edit_opts;
 	TQSpinBox *m_spin_freq;

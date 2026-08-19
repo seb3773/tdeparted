@@ -3600,14 +3600,18 @@ void Dialog_Progress_TQt::on_ui_timeout()
 			}
 			else if (is_output)
 			{
+				// Strip markup first, then compute delta on plain text.
+				// Raw description is like "<tt>escaped_output</tt>" which changes
+				// structure every update (closing tag moves), so position-tracking
+				// on the raw string is wrong.
+				const TQString plain = strip_simple_pango_markup( upd.description );
 				const unsigned prev_pos = (m_terminal_output_pos.find( upd.treepath ) != m_terminal_output_pos.end())
 					? m_terminal_output_pos[upd.treepath] : 0;
-				const Glib::ustring &full = upd.description;
-				if (full.length() > prev_pos)
+				if ((unsigned)plain.length() > prev_pos)
 				{
-					const Glib::ustring delta = full.substr( prev_pos );
-					m_terminal_output_pos[upd.treepath] = full.length();
-					m_terminal_view->append( TQString::fromUtf8( delta.c_str() ) );
+					const TQString delta = plain.mid( prev_pos );
+					m_terminal_output_pos[upd.treepath] = plain.length();
+					m_terminal_view->append( delta );
 				}
 			}
 		}
