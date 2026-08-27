@@ -525,7 +525,6 @@ cat << EOF > "$PAGES_DIR/index.html"
       <div class="badge-group">
         <div class="badge">Official APT Repository</div>
         <div class="badge badge-green">TDE &amp; Linux Native</div>
-        <div class="badge badge-purple">Based on GParted</div>
         <div class="badge">x86_64</div>
       </div>
       <h1>tdeParted <span class="version-pill">v${LATEST_VERSION}</span></h1>
