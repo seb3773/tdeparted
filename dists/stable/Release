@@ -1,24 +1,24 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Thu, 27 Aug 2026 11:46:51 +0000
+Date: Thu, 27 Aug 2026 11:49:01 +0000
 Description: APT Repository for tdeParted (Trinity Desktop & Linux - based on GParted)
 Label: tdeParted APT Repository
 Origin: tdeparted
 Suite: stable
 MD5Sum:
- e8cf1079680b2b7b1b215b45d450b2ea              244 Release
+ 69ec038867c001403918417c9a311bdc              244 Release
  cc1ceff4760a71d5cfdfed78faf86f43              791 main/binary-amd64/Packages
- 1ca02e93e22d583dd21bde679110a545              510 main/binary-amd64/Packages.gz
+ 74d033640f9f2710665fe89d0e231913              510 main/binary-amd64/Packages.gz
 SHA1:
- 3afb247d1dcf3dfae1999ee1b86677a08fbe5014              244 Release
+ 3e4fa9b5e99bd38c070dea0092e9d30cae263801              244 Release
  ba0aa0910bb6cc624e91ffa3732769c028cf4d1d              791 main/binary-amd64/Packages
- fed34e10542464bcf4cae8739670ca01aeff6475              510 main/binary-amd64/Packages.gz
+ 3d864c9727e2e0f481162ffb52973e6066d3b166              510 main/binary-amd64/Packages.gz
 SHA256:
- 5fe02b0cbc2ac151399b892e0fc317b90daf06039f8bdeab934a4e5af2d5e7d4              244 Release
+ e82590b62c51f1056b399cf73330da41c82f7429d94df188091cebcfeeed7a0c              244 Release
  24a5089e197a55d1aaa188fc24d8408351083d80dcec8df154cf3cc131a519a8              791 main/binary-amd64/Packages
- 2be2fdfe25f06b066b0c2d48bfd4f4c493e0adf7f87eefa018a46db30a7a5406              510 main/binary-amd64/Packages.gz
+ 076048850e2736e66dee5babf7f0f568138013bac29a7eabaea242248740e11e              510 main/binary-amd64/Packages.gz
 SHA512:
- 08ef6d600906eaa77adbbf934b0f33922dbcb3bca436040f9d3767643d1ed2a1e11c6bc97fd2220a231df0a20e33b1cddd886814dff6a0ade424b0a407183357              244 Release
+ 2c53691b40f2ecbacb889dad370cf4d59335be92e5fdc2470804d0090f38116850591c89dcf713c411070bf0e797dd34346702ae40200279225cf5f5fc326b83              244 Release
  c309a5bf7d2efd09c8773560de9eeb3c8411b80cdf1eeb4934c548c716a030a6bac2c98883ab6f68af5ce7cf824e8341623281c0e725daa8a49be6eb4a17d635              791 main/binary-amd64/Packages
- c85434f6fc03a3e946adb62ab59b4443b15a152671b7101e6ff915eb6799e06e7a21735e09c4c2173225fb56afa9b08b8279902606c7ca35ba9c197d481b2e0b              510 main/binary-amd64/Packages.gz
+ 485c385d3a54f3ad49937e58dea994c514b7033f2a09c2ac23c98d3327cbf199a81845a1cd5f71bd7aa50d0a850e6630e00f62acb0db2f267acc93d5b61e2999              510 main/binary-amd64/Packages.gz
