@@ -122,7 +122,7 @@ cat << EOF > "$PAGES_DIR/index.html"
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>tdeParted v${LATEST_VERSION} - APT Repository (based on GParted)</title>
   <link rel="icon" type="image/png" href="favicon.png">
-  <meta name="description" content="Official APT Repository and download portal for tdeParted - Advanced Partition Editor for Trinity Desktop Environment (TDE) & Linux, based on GParted.">
+  <meta name="description" content="Official APT Repository and download portal for tdeParted - Advanced Partition Editor for Trinity Desktop Environment (TDE) & Linux based on GParted, with several additional exclusive features.">
   <style>
     :root {
       --bg: #12141a;
@@ -528,7 +528,7 @@ cat << EOF > "$PAGES_DIR/index.html"
         <div class="badge">x86_64</div>
       </div>
       <h1>tdeParted <span class="version-pill">v${LATEST_VERSION}</span></h1>
-      <p class="lead">Advanced Partition Editor for Trinity Desktop Environment (TDE) &amp; Linux &mdash; based on GParted.</p>
+      <p class="lead">Advanced Partition Editor for Trinity Desktop Environment (TDE) &amp; Linux based on GParted, with several additional exclusive features.</p>
     </header>
 
     <!-- Method 1: APT Repository -->
