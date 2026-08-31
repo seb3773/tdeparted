@@ -186,10 +186,17 @@ Description: tdeParted (Trinity/TQt3 partition editor)
  tdeParted is a Trinity Desktop (TDE) / TQt3 fork of GParted.
 EOF
 
-# postinst: refresh icon cache if available.
+# postinst: configure APT repository and refresh icon cache
 cat > "$PKGROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
+# Configuration automatique du dépôt APT pour les futures mises à jour
+if [ -d /etc/apt/sources.list.d ]; then
+    cat << 'REPEOF' > /etc/apt/sources.list.d/tdeparted.list
+# tdeparted APT Repository
+deb [trusted=yes] https://seb3773.github.io/tdeparted/ stable main
+REPEOF
+fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 	gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
 fi
@@ -199,6 +206,23 @@ fi
 exit 0
 EOF
 chmod 0755 "$PKGROOT/DEBIAN/postinst"
+
+# postrm: remove APT repository and refresh icon cache on uninstall
+cat > "$PKGROOT/DEBIAN/postrm" <<'EOF'
+#!/bin/sh
+set -e
+if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
+    rm -f /etc/apt/sources.list.d/tdeparted.list
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+	gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+	update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
+fi
+exit 0
+EOF
+chmod 0755 "$PKGROOT/DEBIAN/postrm"
 
 # prerm: refresh icon cache on removal (best effort).
 cat > "$PKGROOT/DEBIAN/prerm" <<'EOF'
